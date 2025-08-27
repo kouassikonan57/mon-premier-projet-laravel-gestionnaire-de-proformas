@@ -6,6 +6,7 @@ use App\Models\CatalogArticle;
 use Illuminate\Http\Request;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use App\Models\Filiale;
+use App\Events\NouvelArticleCree;
 
 class CatalogArticleController extends Controller
 {
@@ -44,11 +45,14 @@ class CatalogArticleController extends Controller
             'default_price' => 'nullable|numeric|min:0',
         ]);
 
-        CatalogArticle::create([
+        $article = CatalogArticle::create([ // ← Ajoutez $article = 
             'name' => $validated['name'],
             'default_price' => $validated['default_price'],
-            'filiale_id' => auth()->user()->filiale_id, // 🔗 Lier à la filiale
+            'filiale_id' => auth()->user()->filiale_id, 
         ]);
+
+        // 🔥 Événement de mise à jour en temps réel
+        event(new \App\Events\NouvelArticleCree($article, auth()->user()->filiale_id));
 
         return redirect()->route('catalog-articles.index')->with('success', 'Article ajouté avec succès.');
     }

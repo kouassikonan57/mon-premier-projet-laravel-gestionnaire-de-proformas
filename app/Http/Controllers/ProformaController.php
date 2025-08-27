@@ -19,6 +19,7 @@ use Maatwebsite\Excel\Facades\Excel;
 use App\Models\Filiale;
 use App\Models\Article;
 use Illuminate\Validation\Rule;
+use App\Events\NouvelleProformaCree;
 
 
 
@@ -176,6 +177,9 @@ class ProformaController extends Controller
             'user_id' => $user->id,
             'filiale_id' => $validated['filiale_id'],
         ]);
+
+        // 🔥 Événement de mise à jour en temps réel
+        event(new \App\Events\NouvelleProformaCree($proforma, $validated['filiale_id']));
 
         return redirect()->route('proformas.index')->with('success', 'Proforma créée avec ses articles et montant TTC.');
     }

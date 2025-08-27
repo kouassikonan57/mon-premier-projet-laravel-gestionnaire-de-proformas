@@ -6,6 +6,7 @@ use App\Models\Client;
 use Illuminate\Http\Request;
 use App\Models\Filiale;
 use Illuminate\Validation\Rule;
+use App\Events\NouveauClientCree;
 
 class ClientController extends Controller
 {
@@ -68,7 +69,10 @@ class ClientController extends Controller
         }
 
         // Création du client
-        Client::create($validated);
+        $client = Client::create($validated);
+
+        // 🔥 Événement de mise à jour en temps réel
+        event(new \App\Events\NouveauClientCree($client, $validated['filiale_id']));
 
         return redirect()->route('clients.index')->with('success', 'Client créé avec succès.');
     }

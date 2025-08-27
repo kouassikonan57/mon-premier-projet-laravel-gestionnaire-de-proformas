@@ -13,7 +13,7 @@ use Nidrax69\YousignApiLaravel\YousignApiLaravel;
 use App\Models\FactureArticle;
 use App\Models\Filiale;
 use App\Models\ActionLog;
-
+use App\Events\NouvelleFactureCree;
 
 
 class FactureController extends Controller
@@ -212,6 +212,9 @@ class FactureController extends Controller
             'facture_id'  => $facture->id,
             'description' => 'Facture créée depuis la proforma ' . $proforma->reference,
         ]);
+
+        // 🔥 Événement de mise à jour en temps réel
+        event(new \App\Events\NouvelleFactureCree($facture, $proforma->filiale_id));
 
         // ✅ Étape 9 : Redirection
         return redirect()->route('factures.index')
