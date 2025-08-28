@@ -109,13 +109,13 @@
             padding-top: 5px;
         }
 
-        .cachet-numerique {
+        /* .cachet-numerique {
             position: absolute;
             right: 50px;
             bottom: 100px;
-            opacity: 0.7; /* Légère transparence */
+            opacity: 0.7; 
             z-index: 1000;
-        }
+        } */
         
         .signature-area {
             margin-top: 50px;
@@ -255,11 +255,23 @@
             Fait à Abidjan, le {{ date('d/m/Y') }}
         </div>
         <!-- Cachet numérique -->
+        @php
+            $filialeCode = $proforma->filiale->code ?? 'default';
+            $cachetRelativePath = "cachets/{$filialeCode}.png";
+            $cachetPath = public_path($cachetRelativePath);
+
+            // Fallback si le fichier n'existe pas
+            if (!file_exists($cachetPath)) {
+                $cachetPath = public_path("cachets/default.png");
+            }
+        @endphp
+
         @if(file_exists($cachetPath))
-            <div style="position: absolute; right: 50px; bottom: 50px;">
-                <img src="{{ $cachetPath }}" alt="Cachet numérique" style="width: 150px; opacity: 0.7;">
+            <div class="cachet-numerique">
+                <img src="{{ $cachetPath }}" alt="Cachet numérique" style="width: 150px; opacity: 0.7; position: absolute; bottom: 50px; right: 50px;">
             </div>
         @endif
+
     </div>
     <footer>
         {!! nl2br(e($proforma->filiale->footer_text ?? '')) !!}

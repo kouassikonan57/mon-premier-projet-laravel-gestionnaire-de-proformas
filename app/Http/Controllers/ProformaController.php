@@ -341,7 +341,11 @@ class ProformaController extends Controller
         $proforma->setRelation('client', $client);
 
         // Chemin absolu vers le cachet numérique
-        $cachetPath = public_path('images/cachet-numerique.png');
+        $cachetPath = public_path('cachets/DDCS-001.png');
+        $cachetPath = public_path('images/YADI-002.png');
+        $cachetPath = public_path('images/YDIA_CONSTRUCTION-003.png');
+        $cachetPath = public_path('images/VROOM-004.png');
+        $cachetPath = public_path('images/default.png');
 
         // Vérification de l'existence
         if (!file_exists($cachetPath)) {

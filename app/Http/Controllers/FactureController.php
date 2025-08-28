@@ -27,8 +27,12 @@ class FactureController extends Controller
     {
         $facture->load(['client', 'articles', 'filiale']);
 
-        // Chemin du cachet numérique
-        $cachetPath = public_path('images/cachet-numerique.png');
+        // Chemin absolu vers le cachet numérique
+        $cachetPath = public_path('cachets/DDCS-001.png');
+        $cachetPath = public_path('images/YADI-002.png');
+        $cachetPath = public_path('images/YDIA_CONSTRUCTION-003.png');
+        $cachetPath = public_path('images/VROOM-004.png');
+        $cachetPath = public_path('images/default.png');
 
         // Génération du PDF avec la vue
         $pdf = Pdf::loadView('factures.pdf', compact('facture', 'cachetPath'));

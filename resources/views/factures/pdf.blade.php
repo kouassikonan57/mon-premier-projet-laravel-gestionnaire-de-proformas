@@ -257,11 +257,23 @@
             Fait à Abidjan, le {{ date('d/m/Y') }}
         </div>
         <!-- Cachet numérique -->
+        @php
+            $filialeCode = $proforma->filiale->code ?? 'default';
+            $cachetRelativePath = "cachets/{$filialeCode}.png";
+            $cachetPath = public_path($cachetRelativePath);
+
+            // Fallback si le fichier n'existe pas
+            if (!file_exists($cachetPath)) {
+                $cachetPath = public_path("cachets/default.png");
+            }
+        @endphp
+
         @if(file_exists($cachetPath))
-            <div style="position: absolute; right: 50px; bottom: 50px;">
-                <img src="{{ $cachetPath }}" alt="Cachet numérique" style="width: 150px; opacity: 0.7;">
+            <div class="cachet-numerique">
+                <img src="{{ $cachetPath }}" alt="Cachet numérique" style="width: 150px; opacity: 0.7; position: absolute; bottom: 50px; right: 50px;">
             </div>
         @endif
+
     </div>
     <footer>
         <div>
