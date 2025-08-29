@@ -28,6 +28,28 @@
             <input type="date" name="date" id="date" class="form-control" value="{{ now()->toDateString() }}" required>
         </div>
 
+        <!-- Nouveaux champs ajoutés -->
+        <div class="form-group mb-3">
+            <label for="bon_commande">N° Bon de commande</label>
+            <input type="text" name="bon_commande" id="bon_commande" class="form-control" value="{{ old('bon_commande') }}">
+        </div>
+
+        <div class="form-group mb-3">
+            <label for="acompte_pourcentage">Acompte (%)</label>
+            <input type="number" name="acompte_pourcentage" id="acompte_pourcentage" class="form-control" value="{{ old('acompte_pourcentage', 0) }}" min="0" max="100" step="0.01" onchange="calculerAcompte()">
+        </div>
+
+        <div class="form-group mb-3">
+            <label for="acompte_montant">Montant de l'acompte (F CFA)</label>
+            <input type="number" name="acompte_montant" id="acompte_montant" class="form-control" value="{{ old('acompte_montant', 0) }}" min="0" readonly>
+        </div>
+
+        <div class="form-group mb-3">
+            <label for="montant_a_payer">Montant TTC à payer (F CFA)</label>
+            <input type="number" name="montant_a_payer" id="montant_a_payer" class="form-control" value="{{ old('montant_a_payer', 0) }}" readonly>
+        </div>
+        <!-- Fin des nouveaux champs -->
+
         @if($proforma->description)
         <div class="form-group mb-3">
             <label for="description">Description</label>
@@ -89,6 +111,9 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // Initialiser le calcul de l'acompte
+    calculerAcompte();
+    
     // Validation du formulaire
     const form = document.querySelector('form');
     form.addEventListener('submit', function(event) {
@@ -112,5 +137,23 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     });
 });
+
+function calculerAcompte() {
+    // Récupérer le pourcentage d'acompte
+    const pourcentage = parseFloat(document.getElementById('acompte_pourcentage').value) || 0;
+    
+    // Récupérer le montant TTC (à partir du texte affiché)
+    const totalTTC = parseFloat({{ $totalTTC }});
+    
+    // Calculer le montant de l'acompte
+    const acompte = (totalTTC * pourcentage) / 100;
+    
+    // Calculer le montant à payer
+    const aPayer = totalTTC - acompte;
+    
+    // Mettre à jour les champs
+    document.getElementById('acompte_montant').value = acompte.toFixed(2);
+    document.getElementById('montant_a_payer').value = aPayer.toFixed(2);
+}
 </script>
 @endsection

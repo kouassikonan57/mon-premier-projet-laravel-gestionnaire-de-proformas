@@ -159,10 +159,15 @@ class FactureController extends Controller
      */
     public function store(Request $request)
     {
-        // ✅ Étape 1 : Valider la requête
+        // ✅ Étape 1 : Valider la requête avec les nouveaux champs
         $validated = $request->validate([
             'proforma_id' => 'required|exists:proformas,id',
             'date' => 'required|date',
+            'reference' => 'required|string|max:255|unique:factures,reference',
+            'bon_commande' => 'nullable|string|max:255',
+            'acompte_pourcentage' => 'nullable|numeric|min:0|max:100',
+            'acompte_montant' => 'nullable|numeric|min:0',
+            'montant_a_payer' => 'nullable|numeric|min:0',
         ]);
 
         // ✅ Étape 2 : Récupérer la proforma
@@ -180,18 +185,33 @@ class FactureController extends Controller
         $montantTVA = $montantHTApresRemise * ($proforma->tva_rate / 100);
         $montantTTC = $montantHTApresRemise + $montantTVA;
 
+        // Calculer les valeurs d'acompte si fournies
+        $acomptePourcentage = $request->acompte_pourcentage ?? 0;
+        $acompteMontant = $request->acompte_montant ?? 0;
+        $montantAPayer = $request->montant_a_payer ?? $montantTTC;
+
+        // Si un pourcentage d'acompte est fourni mais pas le montant, calculer le montant
+        if ($acomptePourcentage > 0 && $acompteMontant == 0) {
+            $acompteMontant = ($montantTTC * $acomptePourcentage) / 100;
+            $montantAPayer = $montantTTC - $acompteMontant;
+        }
+
         // ✅ Étape 5 : Création de la facture avec les nouveaux champs
         $facture = Facture::create([
-            'client_id'   => $proforma->client_id,
-            'proforma_id' => $proforma->id,
-            'reference'   => 'FAC-' . strtoupper(uniqid()),
-            'date'        => $validated['date'],
-            'amount'      => $montantTTC, // Utiliser le montant TTC calculé avec remise
-            'tva_rate'    => $proforma->tva_rate,
-            'description' => $proforma->description,
-            'remise'      => $proforma->remise,
-            'user_id'     => auth()->id(),
-            'filiale_id'  => $proforma->filiale_id,
+            'client_id'          => $proforma->client_id,
+            'proforma_id'        => $proforma->id,
+            'reference'          => $validated['reference'],
+            'date'               => $validated['date'],
+            'amount'             => $montantHT, // Montant HT sans TVA
+            'tva_rate'           => $proforma->tva_rate,
+            'description'        => $proforma->description,
+            'remise'             => $proforma->remise,
+            'user_id'            => auth()->id(),
+            'filiale_id'         => $proforma->filiale_id,
+            'bon_commande'       => $validated['bon_commande'] ?? null,
+            'acompte_pourcentage'=> $acomptePourcentage,
+            'acompte_montant'    => $acompteMontant,
+            'montant_a_payer'    => $montantAPayer,
         ]);
 
         // ✅ Étape 6 : Copier les articles

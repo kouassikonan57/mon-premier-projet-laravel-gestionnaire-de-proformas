@@ -129,13 +129,29 @@
             padding-top: 5px;
             text-align: center;
         }
+
+        .client-info {
+            margin: 15px 0;
+            border: 1px solid #ccc;
+            padding: 10px;
+            background-color: #f9f9f9;
+        }
+        
+        .client-info p {
+            margin: 4px 0;
+        }
+        
+        .acompte-section {
+            margin-top: 15px;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
     <div class="header clearfix">
         <img src="{{ public_path($facture->filiale->logo_path ?? 'images/default-logo.png') }}" alt="Logo" class="logo">
         <div class="document-meta">
-            <h2 class="titre-facture">FACTURE</h2>
+            <h2 class="titre-facture">FACTURE @if($facture->acompte_pourcentage > 0) D'AVANCE {{ $facture->acompte_pourcentage }}% @endif</h2>
             <table class="table-meta">
                 <tr>
                     <th>DATE D'ÉMISSION</th>
@@ -149,9 +165,14 @@
         </div>
     </div>
 
-    <div class="infos-supplementaires">
-        <p><strong>RÉFÉRENCE : </strong><span style="display:inline-block; width: 60%; text-align: center;"> Facture N° {{ $facture->reference }}</span></p>
-        <p class="card-text mb-1"><strong>CLIENT : </strong><span style="display:inline-block; width: 70%; text-align: center;">{{ $facture->client->name }}</span></p>
+    <!-- Informations client avec adresse et téléphone -->
+    <div class="client-info">
+        <p><strong>CLIENT : </strong><span style="display:inline-block; width: 60%; text-align: right;">{{ $facture->client->name }}</span> </p>
+        <p><strong>ADRESSE : </strong> <span style="display:inline-block; width: 60%; text-align: right;">{{ $facture->client->address ?? 'Non renseignée' }}</span></p>
+        <p><strong>TÉLÉPHONE:</strong> <span style="display:inline-block; width: 60%; text-align: right;">{{ $facture->client->phone ?? 'Non renseigné' }}</span></p>
+        @if($facture->bon_commande)
+        <p><strong>N° BON DE COMMANDE:</strong> <span style="display:inline-block; width: 60%; text-align: right;">{{ $facture->bon_commande }}</span></p>
+        @endif
     </div>
 
     @php
@@ -160,6 +181,9 @@
         $montantTTC = 0;
         $tauxTVA = $facture->tva_rate / 100;
         $remise = $facture->remise ?? 0;
+        
+        // Initialiser $montantRemise pour éviter l'erreur
+        $montantRemise = 0;
     @endphp
 
     <table>
@@ -202,6 +226,15 @@
         $montantHTApresRemise = max($montantHT - $montantRemise, 0);
         $montantTVAApresRemise = $montantHTApresRemise * $tauxTVA;
         $montantTTCApresRemise = $montantHTApresRemise + $montantTVAApresRemise;
+        
+        // Calcul de l'acompte si applicable
+        $acompteMontant = 0;
+        $montantAPayer = $montantTTCApresRemise;
+        
+        if ($facture->acompte_pourcentage > 0) {
+            $acompteMontant = ($montantTTCApresRemise * $facture->acompte_pourcentage) / 100;
+            $montantAPayer = $montantTTCApresRemise - $acompteMontant;
+        }
     @endphp
 
     <table class="total-table">
@@ -236,6 +269,18 @@
             <td>{{ number_format($montantTTC, 2, ',', ' ') }} FCFA</td>
         </tr>
         @endif
+        
+        <!-- Section acompte -->
+        @if($facture->acompte_pourcentage > 0)
+        <tr>
+            <td><strong>ACOMPTE {{ $facture->acompte_pourcentage }}% :</strong></td>
+            <td>{{ number_format($acompteMontant, 2, ',', ' ') }} FCFA</td>
+        </tr>
+        <tr>
+            <td><strong>MONTANT TTC À PAYER :</strong></td>
+            <td>{{ number_format($montantAPayer, 2, ',', ' ') }} FCFA</td>
+        </tr>
+        @endif
     </table>
 
     @php
@@ -244,11 +289,12 @@
             return ucfirst($formatter->format($nombre));
         }
 
-        $montantEnLettres = convertirEnLettres($montantTTCApresRemise ?? $montantTTC);
+        // Utiliser le montant à payer si acompte, sinon le montant TTC
+        $montantEnLettres = convertirEnLettres($facture->acompte_pourcentage > 0 ? $montantAPayer : ($montantTTCApresRemise ?? $montantTTC));
     @endphp
 
     <p style="margin-top: 15px; font-weight: bold;">
-        Montant en lettres : {{ $montantEnLettres }} francs CFA
+        Arrêter la présente facture à la somme de : {{ $montantEnLettres }} francs CFA
     </p>
 
     <!-- Zone de signature avec cachet -->
@@ -258,7 +304,7 @@
         </div>
         <!-- Cachet numérique -->
         @php
-            $filialeCode = $proforma->filiale->code ?? 'default';
+            $filialeCode = $facture->filiale->code ?? 'default';
             $cachetRelativePath = "cachets/{$filialeCode}.png";
             $cachetPath = public_path($cachetRelativePath);
 
