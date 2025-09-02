@@ -10,7 +10,7 @@ use NumberFormatter;
 
 class Facture extends Model
 {
-    protected $fillable = ['proforma_id','user_id', 'description', 'remise', 'bon_commande', 'acompte_pourcentage', 'acompte_montant', 'montant_a_payer','filiale_id','client_id', 'reference', 'date','filiale_id', 'amount',  'status'];
+    protected $fillable = ['proforma_id','user_id', 'description', 'remise', 'bon_commande', 'acompte_pourcentage', 'montant_paye', 'reste_a_payer', 'acompte_montant', 'montant_a_payer','filiale_id','client_id', 'reference', 'date','filiale_id', 'amount',  'status'];
 
     protected $casts = [
         'date' => 'date',
@@ -20,6 +20,8 @@ class Facture extends Model
         'acompte_pourcentage' => 'decimal:2', // Nouveau cast
         'acompte_montant' => 'decimal:2', // Nouveau cast
         'montant_a_payer' => 'decimal:2', // Nouveau cast
+        'montant_paye' => 'decimal:2', // Nouveau
+        'reste_a_payer' => 'decimal:2', // Nouveau
     ];
 
     //relations
@@ -28,6 +30,10 @@ class Facture extends Model
         return $this->hasMany(FactureArticle::class, 'facture_id')->withoutGlobalScopes();
     }
 
+     public function paiements() // Nouvelle relation
+    {
+        return $this->hasMany(Paiement::class);
+    }
 
     public function client()
     {

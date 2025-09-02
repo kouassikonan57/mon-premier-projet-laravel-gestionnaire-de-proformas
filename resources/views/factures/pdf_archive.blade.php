@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <title>Facture {{ $facture->reference }}</title>
+    <title>Facture {{ $facture->reference }} - Paiement du {{ $paiement->date_paiement->format('d/m/Y') }}</title>
     <style>
         body {
             font-family: DejaVu Sans, sans-serif;
@@ -163,12 +163,61 @@
             font-weight: bold;
             background-color: #ffe5e5;
         }
+        
+        .etat-paiement {
+            margin-top: 20px;
+            margin-bottom: 20px;
+            padding: 10px;
+            border: 1px solid #f77f1f;
+            background-color: #fff9f0;
+        }
+        
+        .etat-paiement h4 {
+            margin-top: 0;
+            color: #f77f1f;
+            text-align: center;
+            border-bottom: 1px solid #f77f1f;
+            padding-bottom: 5px;
+        }
     </style>
 </head>
 <body>
     <footer>
         {!! nl2br(e($facture->filiale->footer_text ?? '')) !!}
     </footer>
+
+    @php
+        // CALCULS DES MONTANTS (DOIT ÊTRE PLACÉ AU DÉBUT DU DOCUMENT)
+        $montantHT = 0;
+        $montantTVA = 0;
+        $montantTTC = 0;
+        $tauxTVA = $facture->tva_rate / 100;
+        $remise = $facture->remise ?? 0;
+
+        foreach($facture->articles as $a) {
+            $totalHT = $a->quantity * $a->unit_price;
+            $tva = $totalHT * $tauxTVA;
+            $totalTTC = $totalHT + $tva;
+            $montantHT += $totalHT;
+            $montantTVA += $tva;
+            $montantTTC += $totalTTC;
+        }
+
+        $montantRemise = $montantHT * ($remise / 100);
+        $montantHTApresRemise = max($montantHT - $montantRemise, 0);
+        $montantTVAApresRemise = $montantHTApresRemise * $tauxTVA;
+        $montantTTCApresRemise = $montantHTApresRemise + $montantTVAApresRemise;
+
+        // Calculer le montant payé jusqu'à ce paiement
+        $montantPayeJusquici = $facture->paiements->where('id', '<=', $paiement->id)->sum('montant');
+        $resteAPayer = $montantTTCApresRemise - $montantPayeJusquici;
+        
+        if ($montantTTCApresRemise > 0) {
+            $pourcentagePaye = ($montantPayeJusquici / $montantTTCApresRemise) * 100;
+        } else {
+            $pourcentagePaye = 0;
+        }
+    @endphp
 
     <div class="header clearfix">
         <img src="{{ public_path($facture->filiale->logo_path ?? 'images/default-logo.png') }}" alt="Logo" class="logo">
@@ -178,34 +227,36 @@
                     // DÉTERMINER LE TITRE DYNAMIQUE CORRECT
                     $titre = 'FACTURE';
                     
-                    if ($pourcentageTotalPaye == 100) {
+                    if ($pourcentagePaye == 100) {
                         $titre = 'FACTURE FINALE';
-                    } elseif ($pourcentageTotalPaye > 0) {
-                        // Méthode 1: Compter le nombre de paiements
-                        $nombrePaiements = $facture->paiements->count();
+                    } elseif ($pourcentagePaye > 0) {
+                        // Méthode 1: Compter le nombre de paiements jusqu'à celui-ci
+                        $nombrePaiements = $facture->paiements->where('id', '<=', $paiement->id)->count();
                         
                         // Méthode 2: Vérifier le montant
-                        $ecart = abs($facture->montant_paye - $facture->acompte_montant);
+                        $ecart = abs($montantPayeJusquici - ($facture->acompte_montant ?? 0));
                         
                         if ($nombrePaiements == 1 || $ecart < 0.01) {
                             // Premier paiement ou montant correspondant à l'acompte
-                            $titre = 'FACTURE D\'AVANCE ' . number_format($pourcentageTotalPaye, 2) . '%';
+                            $titre = 'FACTURE D\'AVANCE ' . number_format($pourcentagePaye, 2) . '%';
                         } else {
                             // Paiements supplémentaires
-                            $titre = 'FACTURE SOLDE ' . number_format($pourcentageTotalPaye, 2) . '%';
+                            $titre = 'FACTURE SOLDE ' . number_format($pourcentagePaye, 2) . '%';
                         }
                     }
                 @endphp
-                {{ $titre }}
+                {{ $titre }} - PAIEMENT DU {{ $paiement->date_paiement->format('d/m/Y') }}
             </h2>
             <table class="table-meta">
                 <tr>
                     <th>DATE D'ÉMISSION</th>
+                    <th>DATE DU PAIEMENT</th>
                     <th>RÉFÉRENCE</th>
                 </tr>
                 <tr>
                     <td>{{ $facture->date->format('d/m/Y') }}</td>
-                    <td>{{ $facture->reference }}</td>
+                    <td>{{ $paiement->date_paiement->format('d/m/Y') }}</td>
+                    <td>{{ $facture->reference }}-PAY{{ $paiement->id }}</td>
                 </tr>
             </table>
         </div>
@@ -234,50 +285,52 @@
         </table>
     </div>
 
-    @php
-        // CALCULS DES MONTANTS
-        $montantHT = 0;
-        $montantTVA = 0;
-        $montantTTC = 0;
-        $tauxTVA = $facture->tva_rate / 100;
-        $remise = $facture->remise ?? 0;
-        $montantRemise = 0;
-
-        // Calculer les totaux des articles
-        foreach($facture->articles as $a) {
-            $totalHT = $a->quantity * $a->unit_price;
-            $tva = $totalHT * $tauxTVA;
-            $totalTTC = $totalHT + $tva;
-            $montantHT += $totalHT;
-            $montantTVA += $tva;
-            $montantTTC += $totalTTC;
-        }
-
-        // Calculs après remise
-        $montantRemise = $montantHT * ($remise / 100);
-        $montantHTApresRemise = max($montantHT - $montantRemise, 0);
-        $montantTVAApresRemise = $montantHTApresRemise * $tauxTVA;
-        $montantTTCApresRemise = $montantHTApresRemise + $montantTVAApresRemise;
-
-        // Valeurs actuelles de la facture
-        $montantDejaPaye = $facture->montant_paye;
-        $resteAPayer = $facture->reste_a_payer;
-        
-        // CALCUL CORRECT DU POURCENTAGE
-        $pourcentageTotalPaye = 0;
-        if ($montantTTCApresRemise > 0) {
-            $pourcentageTotalPaye = ($montantDejaPaye / $montantTTCApresRemise) * 100;
-        }
-        
-        // Calculer le pourcentage de chaque paiement pour le titre
-        $pourcentageAcompteInitial = 0;
-        if ($facture->acompte_montant > 0 && $montantTTCApresRemise > 0) {
-            $pourcentageAcompteInitial = ($facture->acompte_montant / $montantTTCApresRemise) * 100;
-        }
-
-        // Compter le nombre de paiements
-        $nombrePaiements = $facture->paiements->count();
-    @endphp
+    <!-- Afficher les informations spécifiques à ce paiement -->
+    <div class="etat-paiement">
+        <h4>DÉTAIL DU PAIEMENT</h4>
+        <table width="100%">
+            <tr>
+                <td width="60%"><strong>Date du paiement:</strong></td>
+                <td width="40%" class="right">{{ $paiement->date_paiement->format('d/m/Y') }}</td>
+            </tr>
+            <tr>
+                <td><strong>Mode de paiement:</strong></td>
+                <td class="right">{{ ucfirst($paiement->mode_paiement) }}</td>
+            </tr>
+            <tr>
+                <td><strong>Montant de ce paiement:</strong></td>
+                <td class="right">{{ number_format($paiement->montant, 2, ',', ' ') }} FCFA</td>
+            </tr>
+            <tr>
+                <td><strong>Pourcentage de ce paiement:</strong></td>
+                <td class="right">{{ number_format($paiement->pourcentage, 2) }}%</td>
+            </tr>
+            <tr>
+                <td><strong>Total payé jusqu'à ce jour:</strong></td>
+                <td class="right">{{ number_format($montantPayeJusquici, 2, ',', ' ') }} FCFA</td>
+            </tr>
+            <tr>
+                <td><strong>Pourcentage total payé:</strong></td>
+                <td class="right">{{ number_format($pourcentagePaye, 2) }}%</td>
+            </tr>
+            <tr>
+                <td><strong>Reste à payer après ce paiement:</strong></td>
+                <td class="right">{{ number_format($resteAPayer, 2, ',', ' ') }} FCFA</td>
+            </tr>
+            @if($paiement->reference)
+            <tr>
+                <td><strong>Référence:</strong></td>
+                <td class="right">{{ $paiement->reference }}</td>
+            </tr>
+            @endif
+            @if($paiement->notes)
+            <tr>
+                <td><strong>Notes:</strong></td>
+                <td class="right">{{ $paiement->notes }}</td>
+            </tr>
+            @endif
+        </table>
+    </div>
 
     <table>
         <thead>
@@ -369,13 +422,13 @@
         @endif
 
         <tr class="facture-important">
-            <td class="facture-label">MONTANT {{ $pourcentageTotalPaye == 100 ? 'TOTAL ' : '' }}PAYÉ ({{ number_format($pourcentageTotalPaye, 2) }}%)</td>
-            <td class="facture-value">{{ number_format($montantDejaPaye, 2, ',', ' ') }} FCFA</td>
+            <td class="facture-label">MONTANT {{ $pourcentagePaye == 100 ? 'TOTAL ' : '' }}PAYÉ ({{ number_format($pourcentagePaye, 2) }}%)</td>
+            <td class="facture-value">{{ number_format($montantPayeJusquici, 2, ',', ' ') }} FCFA</td>
         </tr>
 
         @if($resteAPayer > 0)
             <tr class="facture-important">
-                <td class="facture-label">RESTE À PAYER ({{ number_format(100 - $pourcentageTotalPaye, 2) }}%)</td>
+                <td class="facture-label">RESTE À PAYER ({{ number_format(100 - $pourcentagePaye, 2) }}%)</td>
                 <td class="facture-value">{{ number_format($resteAPayer, 2, ',', ' ') }} FCFA</td>
             </tr>
         @else
@@ -413,7 +466,7 @@
         @endphp
 
         <div style="text-align: right;">
-            Fait à Abidjan, le {{ date('d/m/Y') }}
+            Fait à Abidjan, le {{ $paiement->date_paiement->format('d/m/Y') }}
         </div>
 
         @if(file_exists($cachetPath))

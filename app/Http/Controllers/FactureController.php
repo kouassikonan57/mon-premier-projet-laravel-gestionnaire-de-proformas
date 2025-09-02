@@ -14,6 +14,8 @@ use App\Models\FactureArticle;
 use App\Models\Filiale;
 use App\Models\ActionLog;
 use App\Events\NouvelleFactureCree;
+use App\Models\Paiement;
+use Illuminate\Support\Facades\Storage;
 
 
 class FactureController extends Controller
@@ -25,22 +27,52 @@ class FactureController extends Controller
 
     public function exportPdf(Facture $facture)
     {
-        $facture->load(['client', 'articles', 'filiale']);
+        // Charger les paiements avec la facture
+        $facture->load(['client', 'articles', 'paiements', 'filiale']);
 
-        // Chemin absolu vers le cachet numérique
-        $cachetPath = public_path('cachets/DDCS-001.png');
-        $cachetPath = public_path('images/YADI-002.png');
-        $cachetPath = public_path('images/YDIA_CONSTRUCTION-003.png');
-        $cachetPath = public_path('images/VROOM-004.png');
-        $cachetPath = public_path('images/default.png');
+        // Déterminer le bon chemin du cachet selon la filiale
+        $filialeCode = $facture->filiale->code ?? 'default';
+        $cachetFilename = '';
+        
+        switch($filialeCode) {
+            case 'DDCS-001':
+                $cachetFilename = 'DDCS-001.png';
+                break;
+            case 'YADI-002':
+                $cachetFilename = 'YADI-002.png';
+                break;
+            case 'YDIA_CONSTRUCTION-003':
+                $cachetFilename = 'YDIA_CONSTRUCTION-003.png';
+                break;
+            case 'VROOM-004':
+                $cachetFilename = 'VROOM-004.png';
+                break;
+            default:
+                $cachetFilename = 'default.png';
+        }
+        
+        $cachetPath = public_path("cachets/{$cachetFilename}");
+
+        // Vérifier si le fichier existe, sinon utiliser le cachet par défaut
+        if (!file_exists($cachetPath)) {
+            $cachetPath = public_path("cachets/default.png");
+            
+            // Si le cachet par défaut n'existe pas non plus, on utilise une image vide
+            if (!file_exists($cachetPath)) {
+                $cachetPath = null;
+            }
+        }
 
         // Génération du PDF avec la vue
-        $pdf = Pdf::loadView('factures.pdf', compact('facture', 'cachetPath'));
+        $pdf = Pdf::loadView('factures.pdf', [
+            'facture' => $facture,
+            'cachetPath' => $cachetPath,
+            'pourcentageTotalPaye' => $facture->acompte_pourcentage,
+            'pourcentageAcompteInitial' => $facture->paiements()->orderBy('date_paiement')->first()?->pourcentage ?? 0,
+        ]);
 
-        // ➕ Ajout du numéro de page via le canvas
-        $pdf->getDomPDF()->set_option('isPhpEnabled', true);
-        $canvas = $pdf->getDomPDF()->get_canvas();
-        $canvas->page_text(270, 820, "Page {PAGE_NUM} / {PAGE_COUNT}", 'Helvetica', 10, [150, 150, 150]);
+
+
         // Téléchargement du PDF
         return $pdf->download('facture_' . $facture->reference . '.pdf');
     }
@@ -106,7 +138,8 @@ class FactureController extends Controller
             abort(403, 'Accès non autorisé');
         }
 
-        $facture->load(['client', 'articles']);
+        // ⚠️ CORRECTION : Charger les paiements avec la facture
+        $facture->load(['client', 'articles', 'paiements']);
         return view('factures.show', compact('facture'));
     }
 
@@ -152,6 +185,174 @@ class FactureController extends Controller
         }
         
         return 'FAC-' . date('Y') . '-0001';
+    }
+
+    // Ajoutez cette méthode pour enregistrer les paiements
+    public function enregistrerPaiement(Request $request, Facture $facture)
+    {
+        // Vérification des droits
+        if (!auth()->user()->isAdmin() && $facture->filiale_id !== auth()->user()->filiale_id) {
+            abort(403, 'Accès non autorisé');
+        }
+
+        // Calculer le montant TTC pour les pourcentages - CORRECTION
+        $montantHT = $facture->amount;
+        $remise = $facture->remise ?? 0;
+        $montantHTApresRemise = $montantHT * (1 - $remise / 100);
+        $montantTVA = $montantHTApresRemise * ($facture->tva_rate / 100);
+        $montantTTC = $montantHTApresRemise + $montantTVA;
+
+        // Éviter la division par zéro
+        if ($montantTTC <= 0) {
+            return back()->with('error', 'Erreur de calcul : le montant TTC ne peut pas être zéro.');
+        }
+
+        $validated = $request->validate([
+            'pourcentage_paiement' => 'required|numeric|min:0.01|max:100',
+            'montant' => 'required|numeric|min:0.01|max:' . $facture->reste_a_payer,
+            'date_paiement' => 'required|date',
+            'mode_paiement' => 'required|in:espèce,virement,chèque,carte',
+            'reference' => 'nullable|string|max:255',
+            'notes' => 'nullable|string'
+        ]);
+
+        // Calculer le pourcentage réel par rapport au total TTC
+        $pourcentageReel = ($validated['montant'] / $montantTTC) * 100;
+
+        // Vérifier la cohérence avec le pourcentage saisi (tolérance de 2%)
+        $pourcentageSaisi = $validated['pourcentage_paiement'];
+        $ecart = abs($pourcentageReel - $pourcentageSaisi);
+
+        if ($ecart > 2) {
+            return back()->with('error', 'Incohérence détectée. Le pourcentage calculé ('.number_format($pourcentageReel, 2).'%) ne correspond pas au pourcentage saisi ('.number_format($pourcentageSaisi, 2).'%). Veuillez vérifier le montant.');
+        }
+        
+        // Mettre à jour le pourcentage total payé
+        $nouveauPourcentageTotal = $facture->acompte_pourcentage + $pourcentageReel;
+        $facture->acompte_pourcentage = min($nouveauPourcentageTotal, 100);
+        
+        // Créer le paiement
+        $paiement = Paiement::create([
+            'facture_id' => $facture->id,
+            'montant' => $validated['montant'],
+            'date_paiement' => $validated['date_paiement'],
+            'mode_paiement' => $validated['mode_paiement'],
+            'reference' => $validated['reference'] ?? null,
+            'notes' => $validated['notes'] ?? null,
+            'pourcentage' => $pourcentageReel
+        ]);
+
+        // Déterminer le chemin du cachet
+        $filialeCode = $facture->filiale->code ?? 'default';
+        $cachetFilename = '';
+        
+        switch($filialeCode) {
+            case 'DDCS-001':
+                $cachetFilename = 'DDCS-001.png';
+                break;
+            case 'YADI-002':
+                $cachetFilename = 'YADI-002.png';
+                break;
+            case 'YDIA_CONSTRUCTION-003':
+                $cachetFilename = 'YDIA_CONSTRUCTION-003.png';
+                break;
+            case 'VROOM-004':
+                $cachetFilename = 'VROOM-004.png';
+                break;
+            default:
+                $cachetFilename = 'default.png';
+        }
+        
+        $cachetPath = public_path("cachets/{$cachetFilename}");
+
+        // Vérifier si le fichier existe, sinon utiliser le cachet par défaut
+        if (!file_exists($cachetPath)) {
+            $cachetPath = public_path("cachets/default.png");
+            
+            if (!file_exists($cachetPath)) {
+                $cachetPath = null;
+            }
+        }
+
+        // Générer et sauvegarder le PDF
+        $pdf = Pdf::loadView('factures.pdf', [
+            'facture' => $facture,
+            'cachetPath' => $cachetPath,
+            'pourcentageTotalPaye' => $facture->acompte_pourcentage,
+            'pourcentageAcompteInitial' => $facture->paiements()->orderBy('date_paiement')->first()?->pourcentage ?? 0,
+        ]);
+
+
+        $pdfPath = 'paiements/facture_' . $facture->reference . '_paiement_' . $paiement->id . '.pdf';
+        Storage::put($pdfPath, $pdf->output());
+
+        // Sauvegarder le chemin du PDF
+        $paiement->update(['pdf_path' => $pdfPath]);
+
+        // Mettre à jour les totaux de la facture
+        $facture->montant_paye += $validated['montant'];
+        $facture->reste_a_payer -= $validated['montant'];
+        
+        // Mettre à jour le statut si complètement payé
+        if ($facture->reste_a_payer <= 0) {
+            $facture->status = 'payée';
+            $facture->acompte_pourcentage = 100;
+        }
+        
+        $facture->save();
+
+        // Log de l'action
+        ActionLog::create([
+            'user_id'     => auth()->id(),
+            'action'      => 'Paiement enregistré',
+            'facture_id'  => $facture->id,
+            'description' => 'Paiement de ' . number_format($pourcentageReel, 2) . '% (' . number_format($validated['montant'], 2, ',', ' ') . ' F CFA) enregistré',
+        ]);
+
+        return back()->with('success', 'Paiement de ' . number_format($pourcentageReel, 2) . '% enregistré avec succès.');
+    }
+
+    public function telechargerPaiement(Facture $facture, $paiement_id)
+    {
+        // Charger le paiement spécifique
+        $paiement = Paiement::findOrFail($paiement_id);
+        
+        // Recréer l'état de la facture à ce moment-là
+        $facture->load(['client', 'articles', 'filiale']);
+        
+        // Pour un vrai système d'archivage, vous devriez sauvegarder chaque PDF
+        // Pour l'instant, on ne peut générer que l'état actuel
+        
+        return $this->exportPdf($facture);
+    }
+
+    public function telechargerPaiementPdf(Facture $facture, $paiement)
+    {
+        // Trouver le paiement spécifique
+        $paiement = Paiement::where('facture_id', $facture->id)->findOrFail($paiement);
+        
+        // Charger les données nécessaires
+        $facture->load(['client', 'articles', 'filiale']);
+        
+        // Charger tous les paiements jusqu'à ce paiement
+        $paiementsJusquici = Paiement::where('facture_id', $facture->id)
+                                    ->where('id', '<=', $paiement->id)
+                                    ->get();
+        
+        // Calculer le montant total payé jusqu'à ce paiement
+        $montantPayeJusquici = $paiementsJusquici->sum('montant');
+        
+        // Passer les données à la vue
+        $data = [
+            'facture' => $facture,
+            'paiement' => $paiement,
+            'paiements' => $paiementsJusquici,
+            'montantPayeJusquici' => $montantPayeJusquici
+        ];
+        
+        $pdf = Pdf::loadView('factures.pdf_archive', $data);
+        
+        return $pdf->download('facture_' . $facture->reference . '_paiement_' . $paiement->id . '.pdf');
     }
 
     /**
@@ -202,7 +403,7 @@ class FactureController extends Controller
             'proforma_id'        => $proforma->id,
             'reference'          => $validated['reference'],
             'date'               => $validated['date'],
-            'amount'             => $montantHT, // Montant HT sans TVA
+            'amount'             => $montantHT,
             'tva_rate'           => $proforma->tva_rate,
             'description'        => $proforma->description,
             'remise'             => $proforma->remise,
@@ -212,6 +413,8 @@ class FactureController extends Controller
             'acompte_pourcentage'=> $acomptePourcentage,
             'acompte_montant'    => $acompteMontant,
             'montant_a_payer'    => $montantAPayer,
+            'montant_paye'       => $acompteMontant, // Nouveau champ
+            'reste_a_payer'      => $montantAPayer,  // Nouveau champ
         ]);
 
         // ✅ Étape 6 : Copier les articles
@@ -225,11 +428,22 @@ class FactureController extends Controller
             ]);
         }
 
-        // ✅ Étape 7 : Mettre à jour le statut de la proforma
+        // ✅ Étape 7 : Si acompte, créer un paiement
+        if ($acompteMontant > 0) {
+            Paiement::create([
+                'facture_id' => $facture->id,
+                'montant' => $acompteMontant,
+                'date_paiement' => now(),
+                'mode_paiement' => 'acompte',
+                'notes' => 'Acompte initial de ' . $acomptePourcentage . '%'
+            ]);
+        }
+
+        // ✅ Étape 8 : Mettre à jour le statut de la proforma
         $proforma->status = 'validée';
         $proforma->save();
 
-        // ✅ Étape 8 : Log de l'action
+        // ✅ Étape 9 : Log de l'action
         ActionLog::create([
             'user_id'     => auth()->id(),
             'action'      => 'Création facture',
@@ -240,7 +454,7 @@ class FactureController extends Controller
         // 🔥 Événement de mise à jour en temps réel
         event(new \App\Events\NouvelleFactureCree($facture, $proforma->filiale_id));
 
-        // ✅ Étape 9 : Redirection
+        // ✅ Étape 10 : Redirection
         return redirect()->route('factures.index')
                         ->with('success', 'Facture créée avec succès depuis la proforma.');
     }

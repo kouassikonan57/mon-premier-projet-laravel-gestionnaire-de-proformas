@@ -342,10 +342,10 @@ class ProformaController extends Controller
 
         // Chemin absolu vers le cachet numérique
         $cachetPath = public_path('cachets/DDCS-001.png');
-        $cachetPath = public_path('images/YADI-002.png');
-        $cachetPath = public_path('images/YDIA_CONSTRUCTION-003.png');
-        $cachetPath = public_path('images/VROOM-004.png');
-        $cachetPath = public_path('images/default.png');
+        $cachetPath = public_path('cachets/YADI-002.png');
+        $cachetPath = public_path('cachets/YDIA_CONSTRUCTION-003.png');
+        $cachetPath = public_path('cachets/VROOM-004.png');
+        $cachetPath = public_path('cachets/default.png');
 
         // Vérification de l'existence
         if (!file_exists($cachetPath)) {

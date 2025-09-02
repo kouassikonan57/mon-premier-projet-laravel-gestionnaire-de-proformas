@@ -45,6 +45,12 @@ Route::middleware(['auth'])->group(function () {
     Route::put('/factures/{facture}/changer-statut/{status}', [FactureController::class, 'changerStatut'])->name('factures.changeStatus');
     Route::get('/statistiques', [StatistiquesController::class, 'ventes'])->name('stats.ventes');
     
+    // NOUVELLE ROUTE PAIEMENT
+    Route::post('/factures/{facture}/paiement', [FactureController::class, 'enregistrerPaiement'])
+        ->name('factures.paiement.store');
+
+    Route::get('/factures/{facture}/paiement/{paiement}/pdf', [FactureController::class, 'telechargerPaiementPdf'])
+        ->name('factures.paiement.pdf');
 
     // Tous peuvent voir la liste des filiales
     Route::get('/filiales', [FilialeController::class, 'index'])->name('filiales.index');
