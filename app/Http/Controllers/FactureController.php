@@ -153,6 +153,10 @@ class FactureController extends Controller
         if (!$proformaId) {
             // Si pas de proforma spécifiée, afficher une liste de choix
             $proformas = Proforma::with('client')->orderBy('created_at', 'desc')->get();
+            // Vérification des droits
+            if (!$proforma || (!auth()->user()->isAdmin() && $proforma->filiale_id !== auth()->user()->filiale_id)) {
+                abort(403, 'Accès non autorisé à cette proforma.');
+            }
             return view('factures.select_proforma', compact('proformas'));
         }
 
@@ -173,18 +177,27 @@ class FactureController extends Controller
      */
     private function generateNextReference()
     {
-        $lastFacture = Facture::orderBy('created_at', 'desc')->first();
+        $year = date('Y');
+        
+        // Filtrer par filiale si l'utilisateur n'est pas admin
+        $query = Facture::where('reference', 'like', 'FAC-'.$year.'-%');
+        
+        if (!auth()->user()->isAdmin()) {
+            $query->where('filiale_id', auth()->user()->filiale_id);
+        }
+        
+        $lastFacture = $query->orderBy('created_at', 'desc')->first();
         
         if ($lastFacture && preg_match('/FAC-(\d{4})-(\d+)/', $lastFacture->reference, $matches)) {
-            $year = $matches[1];
+            $lastYear = $matches[1];
             $number = (int)$matches[2];
             
-            if ($year == date('Y')) {
-                return 'FAC-' . date('Y') . '-' . str_pad($number + 1, 4, '0', STR_PAD_LEFT);
+            if ($lastYear == $year) {
+                return 'FAC-' . $year . '-' . str_pad($number + 1, 4, '0', STR_PAD_LEFT);
             }
         }
         
-        return 'FAC-' . date('Y') . '-0001';
+        return 'FAC-' . $year . '-0001';
     }
 
     // Ajoutez cette méthode pour enregistrer les paiements

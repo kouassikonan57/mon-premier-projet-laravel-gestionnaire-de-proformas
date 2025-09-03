@@ -12,6 +12,15 @@ class StatistiquesController extends Controller
 {
     public function ventes(Request $request)
     {
+        // Cette vue va seulement charger le template et le JavaScript
+        return view('statistiques.ventes', [
+            'month' => $request->input('month'),
+            'year' => $request->input('year', now()->year),
+        ]);
+    }
+
+    public function ventesData(Request $request)
+    {
         $user = auth()->user();
         $month = $request->input('month');
         $year = $request->input('year', now()->year);
@@ -22,14 +31,12 @@ class StatistiquesController extends Controller
         // 🔝 Top produits
         $articlesQuery = FactureArticle::select('designation')
             ->selectRaw('SUM(quantity) as total_vendus')
-            ->with('facture')
-            ->whereHas('facture', function ($query) use ($user, $from, $to) {
-                if (!$user->isAdmin()) {
-                    $query->where('filiale_id', $user->filiale_id);
-                }
-                if ($from && $to) {
-                    $query->whereBetween('date', [$from, $to]);
-                }
+            ->join('factures', 'facture_articles.facture_id', '=', 'factures.id')
+            ->when(!$user->isAdmin(), function ($query) use ($user) {
+                $query->where('factures.filiale_id', $user->filiale_id);
+            })
+            ->when($from && $to, function ($query) use ($from, $to) {
+                $query->whereBetween('factures.date', [$from, $to]);
             })
             ->groupBy('designation');
 
@@ -71,8 +78,7 @@ class StatistiquesController extends Controller
         // 👥 Meilleurs clients
         $clientsQuery = Facture::select('client_id')
             ->selectRaw('SUM(amount * 1.18) as total_ca')
-            ->with('client')
-            ->whereHas('client');
+            ->with('client');
 
         if (!$user->isAdmin()) {
             $clientsQuery->where('filiale_id', $user->filiale_id);
@@ -88,13 +94,13 @@ class StatistiquesController extends Controller
             ->limit(5)
             ->get()
             ->map(function ($item) {
-                return (object)[
+                return [
                     'name' => $item->client->name ?? 'N/A',
                     'total_ca' => $item->total_ca,
                 ];
             });
 
-        return view('statistiques.ventes', [
+        return response()->json([
             'topProducts' => $topProducts,
             'bottomProducts' => $bottomProducts,
             'totalVentes' => $totalVentes,
@@ -102,7 +108,7 @@ class StatistiquesController extends Controller
             'year' => $year,
             'salesPerMonth' => $salesPerMonth,
             'bestClients' => $bestClients,
+            'lastUpdate' => now()->format('H:i:s'),
         ]);
     }
-
 }

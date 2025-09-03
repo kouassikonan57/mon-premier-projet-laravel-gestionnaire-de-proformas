@@ -26,6 +26,7 @@ Route::middleware(['auth'])->group(function () {
 
     // Dashboard
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    Route::get('/dashboard/data', [DashboardController::class, 'dashboardData'])->name('dashboard.data');
 
     // Routes pour tous les utilisateurs authentifiés
     Route::resource('clients', ClientController::class);
@@ -44,6 +45,7 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/historique', [HistoriqueController::class, 'index'])->name('historique.index');
     Route::put('/factures/{facture}/changer-statut/{status}', [FactureController::class, 'changerStatut'])->name('factures.changeStatus');
     Route::get('/statistiques', [StatistiquesController::class, 'ventes'])->name('stats.ventes');
+    Route::get('/statistiques/data', [StatistiquesController::class, 'ventesData'])->name('stats.ventes.data');
     
     // NOUVELLE ROUTE PAIEMENT
     Route::post('/factures/{facture}/paiement', [FactureController::class, 'enregistrerPaiement'])

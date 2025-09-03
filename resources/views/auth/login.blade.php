@@ -44,6 +44,16 @@
     .form-label {
         color: #374151; /* gris foncé */
     }
+
+    .highlight-link {
+        color: #ea580c;
+        text-decoration: none;
+        font-weight: bold;
+    }
+
+    .highlight-link:hover {
+        color: #dc3545;
+    }
 </style>
 
 <div class="container">
@@ -52,7 +62,7 @@
             <div class="card login-card">
                 <div class="card-header login-header text-center">
                     <img src="{{ asset('images/logo.png') }}" alt="Logo" class="img-fluid" style="max-height: 80px;">
-                    <h4>{{ __('Login') }}</h4>
+                    <h4>{{ __('Connexion') }}</h4>
                 </div>
 
                 <div class="card-body">
@@ -60,7 +70,7 @@
                         @csrf
 
                         <div class="row mb-3">
-                            <label for="email" class="col-md-4 col-form-label text-md-end">{{ __('Email Address') }}</label>
+                            <label for="email" class="col-md-4 col-form-label text-md-end">{{ __('Adresse e-mail') }}</label>
                             <div class="col-md-6">
                                 <input id="email" type="email"
                                     class="form-control @error('email') is-invalid @enderror"
@@ -76,7 +86,7 @@
 
                         <div class="row mb-3">
                             <label for="password"
-                                class="col-md-4 col-form-label text-md-end">{{ __('Password') }}</label>
+                                class="col-md-4 col-form-label text-md-end">{{ __('Mot de passe') }}</label>
                             <div class="col-md-6">
                                 <input id="password" type="password"
                                     class="form-control @error('password') is-invalid @enderror" name="password"
@@ -96,7 +106,7 @@
                                     <input class="form-check-input" type="checkbox" name="remember" id="remember"
                                         {{ old('remember') ? 'checked' : '' }}>
                                     <label class="form-check-label" for="remember">
-                                        {{ __('Remember Me') }}
+                                        {{ __('Souviens-toi de moi') }}
                                     </label>
                                 </div>
                             </div>
@@ -104,15 +114,15 @@
 
                         <div class="row mb-0">
                             <div class="col-md-8 offset-md-4">
-                                <button type="submit" class="btn btn-primary">
-                                    {{ __('Login') }}
-                                </button>
-
                                 @if (Route::has('password.request'))
-                                    <a class="btn btn-link text-decoration-none" href="{{ route('password.request') }}">
-                                        {{ __('Forgot Your Password?') }}
+                                    <a style="margin-top: -20px;" class="btn btn-link text-decoration-none" href="{{ route('password.request') }}">
+                                        {{ __('Mot de passe oublié ?') }}
                                     </a>
                                 @endif
+                                <br>
+                                <button type="submit" class="btn btn-primary">
+                                    {{ __('Connexion') }}
+                                </button>
                             </div>
                         </div>
                     </form>
@@ -120,5 +130,8 @@
             </div>
         </div>
     </div>
+</div>
+<div class="text-center  py-3 text-muted">© Yadi-Group. Développé par
+    <a href="https://github.com/kouassikonan57/" target="_blank" class="highlight-link">KFernand</a>
 </div>
 @endsection
