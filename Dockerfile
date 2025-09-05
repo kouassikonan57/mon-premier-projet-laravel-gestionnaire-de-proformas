@@ -1,19 +1,10 @@
 FROM php:8.2-fpm
 
-# Installer les dépendances système
+# Installer les dépendances nécessaires
 RUN apt-get update && apt-get install -y \
-    build-essential \
-    libpng-dev \
-    libjpeg-dev \
-    libonig-dev \
-    libxml2-dev \
-    zip \
-    unzip \
-    git \
-    curl \
-    libzip-dev \
-    npm \
-    nodejs
+    git curl libpng-dev libjpeg-dev libfreetype6-dev \
+    libonig-dev libxml2-dev zip unzip libzip-dev \
+    libmcrypt-dev mariadb-client nodejs npm
 
 # Installer les extensions PHP
 RUN docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd zip
@@ -21,22 +12,20 @@ RUN docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd zip
 # Installer Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
-# Set working directory
+# Créer et utiliser le répertoire de travail
 WORKDIR /var/www
 
 # Copier le projet dans le conteneur
 COPY . .
 
-# Installer les dépendances Laravel
-RUN composer install --optimize-autoloader --no-dev
-
-# Compiler les assets avec Vite
+# Installer les dépendances PHP et JS
+RUN composer install --no-dev --optimize-autoloader
 RUN npm install && npm run build
 
 # Donner les bons droits
-RUN chown -R www-data:www-data /var/www
+RUN chown -R www-data:www-data /var/www/storage
 
-# Exposer le port utilisé par Artisan serve
+# Exposer le port de Laravel
 EXPOSE 8000
 
 # Lancer le serveur Laravel
